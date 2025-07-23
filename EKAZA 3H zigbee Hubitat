@@ -1,0 +1,73 @@
+metadata {
+    definition(name: "EKAZA Zigbee 3CH FerTrato", namespace: "FerTrato", author: "ChatGPT") {
+        capability "Actuator"
+        capability "Initialize"
+        capability "Refresh"
+        capability "Switch"
+
+        command "childOn", ["string"]
+        command "childOff", ["string"]
+
+        fingerprint profileId: "0104", inClusters: "0006", outClusters: "0019", manufacturer: "EKAZA", model: "EKAC-T3093Z", deviceJoinName: "EKAZA 3CH Módulo"
+    }
+
+    preferences {
+        input name: "logEnable", type: "bool", title: "Habilitar logging?", defaultValue: true
+    }
+}
+
+def installed() {
+    if (logEnable) log.info "Instalado - criando child devices..."
+    createChildDevices()
+}
+
+def updated() {
+    if (logEnable) log.info "Atualizado - recriando child devices..."
+    createChildDevices()
+}
+
+def initialize() {
+    if (logEnable) log.info "Inicializando..."
+    createChildDevices()
+}
+
+def refresh() {
+    if (logEnable) log.debug "Requisição de refresh()"
+    // Aqui você pode adicionar comandos Zigbee para puxar estado, se suportado
+}
+
+def createChildDevices() {
+    (1..3).each { endpoint ->
+        def childDni = "${device.deviceNetworkId}-${endpoint}"
+        if (!getChildDevice(childDni)) {
+            addChildDevice("hubitat", "Generic Component Switch", childDni, [name: "CH${endpoint}", isComponent: true, label: "${device.displayName} CH${endpoint}"])
+            if (logEnable) log.debug "Child CH${endpoint} criado com DNI: ${childDni}"
+        }
+    }
+}
+
+def childOn(String dni) {
+    def endpoint = dni.split("-").last() as int
+    if (logEnable) log.debug "Ligando CH${endpoint}"
+    sendZigbeeCommand(endpoint, 1)
+}
+
+def childOff(String dni) {
+    def endpoint = dni.split("-").last() as int
+    if (logEnable) log.debug "Desligando CH${endpoint}"
+    sendZigbeeCommand(endpoint, 0)
+}
+
+def sendZigbeeCommand(endpoint, value) {
+    def cmd = zigbee.command(0x0006, value ? 0x01 : 0x00, "", [destEndpoint: endpoint])
+    if (logEnable) log.debug "Comando enviado para endpoint ${endpoint}: ${cmd}"
+    sendHubCommand(new hubitat.device.HubAction(cmd, hubitat.device.Protocol.ZIGBEE))
+}
+
+def componentOn(childDevice) {
+    childOn(childDevice.deviceNetworkId)
+}
+
+def componentOff(childDevice) {
+    childOff(childDevice.deviceNetworkId)
+}
